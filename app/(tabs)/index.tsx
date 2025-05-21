@@ -1,10 +1,15 @@
-import React, { useState, useRef, useEffect } from 'react';
-import {
-  View, Text, TouchableOpacity, StyleSheet, SafeAreaView,
-  Image, FlatList, ActivityIndicator
-} from 'react-native';
-import { CameraView, CameraType, FlashMode, Camera } from 'expo-camera';
+import { Camera, CameraType, CameraView, FlashMode } from 'expo-camera';
 import * as MediaLibrary from 'expo-media-library';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  FlatList,
+  Image,
+  SafeAreaView,
+  StyleSheet,
+  Text, TouchableOpacity,
+  View
+} from 'react-native';
 
 export default function App() {
   const cameraRef = useRef<CameraView>(null);
@@ -17,10 +22,17 @@ export default function App() {
 
   useEffect(() => {
     (async () => {
-      const { status } = await Camera.requestCameraPermissionsAsync();
+      const { status: cameraStatus } = await Camera.requestCameraPermissionsAsync();
       const { status: mediaStatus } = await MediaLibrary.requestPermissionsAsync();
-      const granted = status === 'granted' && mediaStatus === 'granted';
+      const { status: audioStatus } = await Camera.requestMicrophonePermissionsAsync();
+
+      const granted = 
+        cameraStatus === 'granted' &&
+        mediaStatus === 'granted' &&
+        audioStatus === 'granted';
+
       setHasPermission(granted);
+
       if (granted) {
         loadGallery();
       }
@@ -45,32 +57,31 @@ export default function App() {
     }
   };
 
-const recordVideo = async () => {
-  if (cameraRef.current) {
-    if (!isRecording) {
-      setIsRecording(true);
-      try {
-        const video = await cameraRef.current.recordAsync();
-        if (video && video.uri) {
-          await MediaLibrary.saveToLibraryAsync(video.uri);
-          alert('🎥 Vídeo salvo!');
-          loadGallery();
-        } else {
-          alert('⚠️ Falha ao gravar vídeo.');
+  const recordVideo = async () => {
+    if (cameraRef.current) {
+      if (!isRecording) {
+        setIsRecording(true);
+        try {
+          const video = await cameraRef.current.recordAsync();
+          if (video && video.uri) {
+            await MediaLibrary.saveToLibraryAsync(video.uri);
+            alert('🎥 Vídeo salvo!');
+            loadGallery();
+          } else {
+            alert('⚠️ Falha ao gravar vídeo.');
+          }
+        } catch (error) {
+          console.error('Erro na gravação de vídeo:', error);
+          alert('❌ Erro ao gravar vídeo.');
+        } finally {
+          setIsRecording(false);
         }
-      } catch (error) {
-        console.error('Erro na gravação de vídeo:', error);
-        alert('❌ Erro ao gravar vídeo.');
-      } finally {
+      } else {
+        cameraRef.current.stopRecording();
         setIsRecording(false);
       }
-    } else {
-      cameraRef.current.stopRecording();
-      setIsRecording(false);
     }
-  }
-};
-
+  };
 
   const toggleCameraType = () => {
     setType(current => (current === 'back' ? 'front' : 'back'));
@@ -101,7 +112,7 @@ const recordVideo = async () => {
     return (
       <View style={styles.loadingContainer}>
         <Text style={styles.errorText}>
-          Permissão para acessar a câmera e a galeria foi negada.
+          Permissão para acessar câmera, microfone e galeria foi negada.
         </Text>
       </View>
     );
@@ -228,6 +239,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
 });
+
 
 
 
