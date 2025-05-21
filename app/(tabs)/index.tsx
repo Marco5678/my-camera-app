@@ -1,75 +1,233 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import {
+  View, Text, TouchableOpacity, StyleSheet, SafeAreaView,
+  Image, FlatList, ActivityIndicator
+} from 'react-native';
+import { CameraView, CameraType, FlashMode, Camera } from 'expo-camera';
+import * as MediaLibrary from 'expo-media-library';
 
-import { HelloWave } from '@/components/HelloWave';
-import ParallaxScrollView from '@/components/ParallaxScrollView';
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
+export default function App() {
+  const cameraRef = useRef<CameraView>(null);
+  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [type, setType] = useState<CameraType>('back');
+  const [zoom, setZoom] = useState(0);
+  const [flash, setFlash] = useState<FlashMode>('off');
+  const [galleryItems, setGalleryItems] = useState<MediaLibrary.Asset[]>([]);
 
-export default function HomeScreen() {
+  useEffect(() => {
+    (async () => {
+      const { status } = await Camera.requestCameraPermissionsAsync();
+      const { status: mediaStatus } = await MediaLibrary.requestPermissionsAsync();
+      const granted = status === 'granted' && mediaStatus === 'granted';
+      setHasPermission(granted);
+      if (granted) {
+        loadGallery();
+      }
+    })();
+  }, []);
+
+  const loadGallery = async () => {
+    const { assets } = await MediaLibrary.getAssetsAsync({
+      mediaType: ['photo', 'video'],
+      first: 20,
+      sortBy: ['creationTime'],
+    });
+    setGalleryItems(assets);
+  };
+
+  const takePicture = async () => {
+    if (cameraRef.current) {
+      const photo = await cameraRef.current.takePictureAsync();
+      await MediaLibrary.saveToLibraryAsync(photo.uri);
+      alert('📸 Foto salva!');
+      loadGallery();
+    }
+  };
+
+const recordVideo = async () => {
+  if (cameraRef.current) {
+    if (!isRecording) {
+      setIsRecording(true);
+      try {
+        const video = await cameraRef.current.recordAsync();
+        if (video && video.uri) {
+          await MediaLibrary.saveToLibraryAsync(video.uri);
+          alert('🎥 Vídeo salvo!');
+          loadGallery();
+        } else {
+          alert('⚠️ Falha ao gravar vídeo.');
+        }
+      } catch (error) {
+        console.error('Erro na gravação de vídeo:', error);
+        alert('❌ Erro ao gravar vídeo.');
+      } finally {
+        setIsRecording(false);
+      }
+    } else {
+      cameraRef.current.stopRecording();
+      setIsRecording(false);
+    }
+  }
+};
+
+
+  const toggleCameraType = () => {
+    setType(current => (current === 'back' ? 'front' : 'back'));
+  };
+
+  const toggleFlashMode = () => {
+    setFlash(current => (current === 'off' ? 'on' : 'off'));
+  };
+
+  const handleZoomOut = () => {
+    setZoom(current => Math.max(current - 0.1, 0));
+  };
+
+  const handleZoomIn = () => {
+    setZoom(current => Math.min(current + 0.1, 1));
+  };
+
+  if (hasPermission === null) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#fff" />
+        <Text style={styles.loadingText}>Solicitando permissões...</Text>
+      </View>
+    );
+  }
+
+  if (!hasPermission) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Text style={styles.errorText}>
+          Permissão para acessar a câmera e a galeria foi negada.
+        </Text>
+      </View>
+    );
+  }
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
+    <SafeAreaView style={styles.container}>
+      <CameraView
+        ref={cameraRef}
+        style={styles.camera}
+        facing={type}
+        flash={flash}
+        zoom={zoom}
+      />
+
+      <View style={styles.controls}>
+        <TouchableOpacity onPress={takePicture} style={styles.button}>
+          <Text style={styles.text}>📷 Foto</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={recordVideo}
+          style={[styles.button, isRecording && styles.recording]}
+        >
+          <Text style={styles.text}>
+            {isRecording ? '🛑 Parar' : '🎬 Gravar'}
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity onPress={toggleCameraType} style={styles.button}>
+          <Text style={styles.text}>🔄 Câmera</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity onPress={toggleFlashMode} style={styles.button}>
+          <Text style={styles.text}>
+            ⚡ Flash {flash === 'on' ? 'On' : 'Off'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.zoomControls}>
+        <TouchableOpacity onPress={handleZoomOut}>
+          <Text style={styles.text}>➖ Zoom -</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={handleZoomIn}>
+          <Text style={styles.text}>➕ Zoom +</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.gallery}>
+        <Text style={styles.galleryTitle}>🖼️ Galeria</Text>
+        <FlatList
+          horizontal
+          data={galleryItems}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => (
+            <Image source={{ uri: item.uri }} style={styles.galleryImage} />
+          )}
         />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
+  container: { flex: 1, backgroundColor: '#000' },
+  camera: { flex: 1 },
+  controls: {
     flexDirection: 'row',
+    justifyContent: 'space-around',
+    backgroundColor: '#111',
+    paddingVertical: 10,
+  },
+  zoomControls: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 20,
+    paddingVertical: 5,
+    backgroundColor: '#111',
+  },
+  button: {
+    padding: 10,
+    backgroundColor: '#222',
+    borderRadius: 10,
+  },
+  recording: {
+    backgroundColor: 'red',
+  },
+  text: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  gallery: {
+    backgroundColor: '#111',
+    paddingVertical: 10,
+    paddingHorizontal: 5,
+  },
+  galleryTitle: {
+    color: '#fff',
+    fontWeight: 'bold',
+    marginBottom: 5,
+    marginLeft: 5,
+  },
+  galleryImage: {
+    width: 100,
+    height: 100,
+    marginRight: 10,
+    borderRadius: 10,
+  },
+  loadingContainer: {
+    flex: 1,
+    backgroundColor: '#000',
+    justifyContent: 'center',
     alignItems: 'center',
-    gap: 8,
+    padding: 20,
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+  loadingText: {
+    color: '#fff',
+    marginTop: 10,
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  errorText: {
+    color: '#ff4444',
+    textAlign: 'center',
+    fontSize: 16,
   },
 });
+
+
+
